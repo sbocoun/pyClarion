@@ -15,7 +15,7 @@ from ..numdicts import ks_crawl
 class BufferOps(Atoms):
     nil: Atom
     clear: Atom
-    add: Atom
+    stage: Atom
     store: Atom
     flip: Atom
     fetch: Atom
@@ -37,24 +37,33 @@ class Buffer(Stateful):
         b: Bus,
         v: DataFamily,
         c: Chunks,
-        s: BufferOps
+        s: DataFamily | BufferOps
     ) -> None:
-        triggers = (self.start_clear, self.start_add, self.start_store, 
+        triggers = (self.start_clear, self.start_stage, self.start_store, 
             self.start_flip, self.start_fetch)
         super().__init__(name, *triggers)
         self.system.check_root(p, m, b, v, c, s)
         idx_c, idx_s = self._init_indexes(c, s)
         self.c = c
-        self.s = s
         self.main = State(idx_c, {}, 0.0)
-        self.status = State(idx_s, {~s.nil: 1.0}, 0.0)
+        if isinstance(s, BufferOps):
+            self.s, self.status = s, State(idx_s, {~s.nil: 1.0}, 0.0)
+        else:
+            self.s, self.status = self._init_sort(s, BufferOps, 0.0, nil=1.0)
         with self:
             self.reader = Discriminal(f"{name}.reader", p, (m, v))
             self.router = Router(f"{name}.router", m, b, v)
             self.requester = Accumulator(f"{name}.requester", (b, v))
             self.retriever = Choice(f"{name}.retriever", p, v, c)
+        with self.retriever.main[0].mutable() as d:
+            d[~self.c.nil] = 1.0
         self.requester = self.reader >> self.router >> self.requester
 
+    @property
+    def full(self) -> bool:
+        assert self.retriever.main[0].valmax() == 1.0
+        return self.retriever.main[0].argmax() != ~self.c.nil
+            
     def resolve(self, event: Event) -> None:
 
         status = self.current_status
@@ -78,11 +87,11 @@ class Buffer(Stateful):
             elif source == self.requester.clear:
                 schedule(self.finish_store())
 
-        elif status == ~self.s.add:
-            if source == self.start_add:
+        elif status == ~self.s.stage:
+            if source == self.start_stage:
                 schedule(self.reader.select())
             elif source == self.requester.forward:
-                schedule(self.finish_add())
+                schedule(self.finish_stage())
 
         elif status == ~self.s.flip:
             if source == self.start_flip:
@@ -114,17 +123,17 @@ class Buffer(Stateful):
     ) -> Event:
         return self._terminate(self.finish_clear, dt, priority)
 
-    def start_add(self, 
+    def start_stage(self, 
         dt: timedelta = timedelta(), 
         priority: Priority = Priority.DEFERRED
     ) -> Event:
-        return self._trigger(self.start_add, self.s.add, dt, priority)
+        return self._trigger(self.start_stage, self.s.stage, dt, priority)
     
-    def finish_add(self, 
+    def finish_stage(self, 
         dt: timedelta = timedelta(), 
         priority: Priority = Priority.PROPAGATION
     ) -> Event:
-        return self._terminate(self.finish_add, dt, priority)
+        return self._terminate(self.finish_stage, dt, priority)
     
     def start_store(self, 
         dt: timedelta = timedelta(), 
@@ -199,8 +208,16 @@ class Buffer(Stateful):
         return Chunk(dyads)
 
 
+class StackOps(Atoms):
+    nil: Atom
+    stage: Atom
+    push: Atom
+    pop: Atom
+    flush: Atom
+
+
 class Stack(Stateful):
-    s: BufferOps
+    s: StackOps
     status: Site = Site()
     chunks: ChunkStore
     bla: BaseLevel
@@ -217,10 +234,9 @@ class Stack(Stateful):
         m: Bus,
         b: Bus,
         v: DataFamily,
-        s: BufferOps
+        s: StackOps
     ) -> None:
-        triggers = (self.start_clear, self.start_add, self.start_store, 
-            self.start_flip, self.start_fetch)
+        triggers = (self.start_push, self.start_pop, self.start_flush)
         super().__init__(name, *triggers)
         self.system.check_root(s)
         idx_s, = self._init_indexes(s)
@@ -229,122 +245,113 @@ class Stack(Stateful):
         with self:            
             self.chunks = ChunkStore(f"{name}.chunks", c, (b, v))
             self.bla = BaseLevel(f"{name}.bla", p, v, self.chunks.c)
-            self.buffer = Buffer(f"{name}.buffer", p, m, b, v, self.chunks.c, s)
+            self.buffer = Buffer(f"{name}.buffer", p, m, b, v, self.chunks.c, v)
             self.controller = Controller(f"{name}.controller", a, s,
-                clear=self.start_clear, 
-                add=self.start_add, 
-                store=self.start_store,
-                flip=self.start_flip,
-                fetch=self.start_fetch)
+                push=self.start_push, 
+                pop=self.start_pop,
+                flush=self.start_flush)
         self.buffer.retriever = self.bla >> self.buffer.retriever
-
         
     def resolve(self, event: Event) -> None:
         status = self.current_status
         source = event.source
         schedule = self.system.schedule
-
         if status == ~self.s.nil:
             pass
-
-        elif status == ~self.s.clear:
-            if source == self.start_clear:
-                schedule(self.buffer.start_clear())
-            elif source == self.buffer.finish_clear:
-                schedule(self.finish_clear())
-
-        elif status == ~self.s.add:
-            if source == self.start_add:
-                schedule(self.buffer.start_add())
-            elif source == self.buffer.finish_add:
-                schedule(self.finish_add())
-
-        elif status == ~self.s.store:
-            if source == self.start_store:
-                schedule(self.buffer.start_add())
-            elif source == self.buffer.finish_add:
-                schedule(self.buffer.start_store())
-            elif source == self.buffer.finish_store:
-                schedule(self.finish_store())
-
-        elif status == ~self.s.flip:
-            if source == self.start_flip:
-                schedule(self.buffer.start_add())
-            elif source == self.buffer.finish_add:
+        elif status == ~self.s.stage:
+            if source == self.start_stage:
+                schedule(self.buffer.start_stage())
+            elif source == self.buffer.finish_stage:
+                schedule(self.finish_stage())
+        elif status == ~self.s.push:
+            if source == self.start_push:
+                schedule(self.buffer.start_stage())
+            elif source == self.buffer.finish_stage:
                 schedule(self.buffer.start_flip())
             elif source == self.buffer.finish_flip:
-                schedule(self.finish_flip())
-
-        elif status == ~self.s.fetch:
-            if source == self.start_fetch:
-                schedule(self.buffer.start_add())
-            elif source == self.buffer.finish_add:
-                schedule(self.bla.advance())
-            elif source == self.bla.advance:
+                schedule(self.finish_push())
+        elif status == ~self.s.pop:
+            if source == self.start_pop:
+                if self.buffer.full:
+                    schedule(self._pop())
+                else:
+                    schedule(self.buffer.start_fetch())
+            elif source == self._pop:
                 schedule(self.buffer.start_fetch())
             elif source == self.buffer.finish_fetch:
-                schedule(self.finish_fetch())
-
+                schedule(self.finish_pop())
+        elif status == ~self.s.flush:
+            if source == self.start_flush:
+                schedule(self._flush())
+            elif source == self._flush:
+                schedule(self.buffer.start_fetch())
+            elif source == self.buffer.finish_fetch:
+                schedule(self.finish_flush())
         else:
             raise RuntimeError(f"{type(self).__name__} object '{self.name}' in "
                 "invalid state.")
-    
-    def start_clear(self, 
+
+    def start_stage(self, 
         dt: timedelta = timedelta(), 
         priority: Priority = Priority.DEFERRED
     ) -> Event:
-        return self._trigger(self.start_clear, self.s.clear, dt, priority)
+        return self._trigger(self.start_push, self.s.stage, dt, priority)
                              
-    def finish_clear(self, 
+    def finish_stage(self, 
         dt: timedelta = timedelta(), 
         priority: Priority = Priority.PROPAGATION
     ) -> Event:
-        return self._terminate(self.finish_clear, dt, priority)
+        return self._terminate(self.finish_push, dt, priority)
+
+    def start_push(self, 
+        dt: timedelta = timedelta(), 
+        priority: Priority = Priority.DEFERRED
+    ) -> Event:
+        return self._trigger(self.start_push, self.s.push, dt, priority)
+                             
+    def finish_push(self, 
+        dt: timedelta = timedelta(), 
+        priority: Priority = Priority.PROPAGATION
+    ) -> Event:
+        return self._terminate(self.finish_push, dt, priority)
                 
-    def start_add(self, 
+    def start_pop(self, 
         dt: timedelta = timedelta(), 
         priority: Priority = Priority.DEFERRED
     ) -> Event:
-        return self._trigger(self.start_add, self.s.add, dt, priority)
+        return self._trigger(self.start_pop, self.s.pop, dt, priority)
+    
+    def _pop(self, 
+        dt: timedelta = timedelta(), 
+        priority: Priority = Priority.PROPAGATION
+    ) -> Event:
+        c = self.buffer.retriever.main[0].argmax()
+        assert self.buffer.retriever.main[0][c] == 1.0
+        ud = ChunkUpdate(self.chunks.c, remove=(c[-1][0],))
+        return Event(self._pop, [ud], dt, priority)
                              
-    def finish_add(self, 
+    def finish_pop(self, 
         dt: timedelta = timedelta(), 
         priority: Priority = Priority.PROPAGATION
     ) -> Event:
-        return self._terminate(self.finish_add, dt, priority)
+        return self._terminate(self.finish_pop, dt, priority)
 
-    def start_store(self, 
+    def start_flush(self, 
         dt: timedelta = timedelta(), 
         priority: Priority = Priority.DEFERRED
     ) -> Event:
-        return self._trigger(self.start_store, self.s.store, dt, priority)
-                             
-    def finish_store(self, 
+        return self._trigger(self.start_flush, self.s.flush, dt, priority)
+    
+    def _flush(self, 
         dt: timedelta = timedelta(), 
         priority: Priority = Priority.PROPAGATION
     ) -> Event:
-        return self._terminate(self.finish_store, dt, priority)
+        remove = tuple(c for c in self.chunks.c if c != "nil")
+        ud = ChunkUpdate(self.chunks.c, remove=remove)
+        return Event(self._flush, [ud], dt, priority)
 
-    def start_flip(self, 
-        dt: timedelta = timedelta(), 
-        priority: Priority = Priority.DEFERRED
-    ) -> Event:
-        return self._trigger(self.start_flip, self.s.flip, dt, priority)
-                             
-    def finish_flip(self, 
+    def finish_flush(self, 
         dt: timedelta = timedelta(), 
         priority: Priority = Priority.PROPAGATION
     ) -> Event:
-        return self._terminate(self.finish_flip, dt, priority)
-
-    def start_fetch(self, 
-        dt: timedelta = timedelta(), 
-        priority: Priority = Priority.DEFERRED
-    ) -> Event:
-        return self._trigger(self.start_fetch, self.s.fetch, dt, priority)
-
-    def finish_fetch(self, 
-        dt: timedelta = timedelta(), 
-        priority: Priority = Priority.PROPAGATION
-    ) -> Event:
-        return self._terminate(self.finish_fetch, dt, priority)
+        return self._terminate(self.finish_flush, dt, priority)

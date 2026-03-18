@@ -4,7 +4,7 @@ from .events import Update, Event, Clock, Process, Site
 from .knowledge import (Symbol, Term, Sort, Family, Atom, Compound, Chunk, Rule, 
     Atoms, Chunks, Rules)
 from .components import (Environment, Agent, Input, Choice, Pool, 
-    TopDown, BottomUp, ChunkStore, Priority 
+    TopDown, BottomUp, ChunkStore, Layer, Priority 
     # RuleStore, FixedRules, 
     # BaseLevel,
     # Layer, Optimizer, Activation, Cost, ErrorSignal, Supervised, 
@@ -22,10 +22,10 @@ __all__ = [
     "Atoms", "Chunks", "Rules",
     # from components
     "Environment", "Agent", "Input", "Choice", "Pool", "TopDown", "BottomUp", 
-    "ChunkStore", 
+    "ChunkStore", "Layer" 
     #"RuleStore", "FixedRules", 
     # "BaseLevel",
-    # "Layer", "Optimizer", "Activation", "Cost", "ErrorSignal",
+    # "Optimizer", "Activation", "Cost", "ErrorSignal",
     # "Supervised", "TDError", "LeastSquares", "Tanh",
     # "SGD", "Adam",
     # "MLP", "IDN", "Train"
