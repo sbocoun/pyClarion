@@ -236,7 +236,7 @@ class Stack(Stateful):
         v: DataFamily,
         s: StackOps
     ) -> None:
-        triggers = (self.start_push, self.start_pop, self.start_flush)
+        triggers = (self.start_stage, self.start_push, self.start_pop, self.start_flush)
         super().__init__(name, *triggers)
         self.system.check_root(s)
         idx_s, = self._init_indexes(s)
