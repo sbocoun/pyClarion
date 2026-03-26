@@ -296,13 +296,13 @@ class Stack(Stateful):
         dt: timedelta = timedelta(), 
         priority: Priority = Priority.DEFERRED
     ) -> Event:
-        return self._trigger(self.start_push, self.s.stage, dt, priority)
+        return self._trigger(self.start_stage, self.s.stage, dt, priority)
                              
     def finish_stage(self, 
         dt: timedelta = timedelta(), 
         priority: Priority = Priority.PROPAGATION
     ) -> Event:
-        return self._terminate(self.finish_push, dt, priority)
+        return self._terminate(self.finish_stage, dt, priority)
 
     def start_push(self, 
         dt: timedelta = timedelta(), 
