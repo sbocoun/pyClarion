@@ -36,7 +36,7 @@ from pyClarion.knowledge import Root, BusFamily, Buses, Bus, DataFamily
 # ---------------------------------------------------------------------------
 
 class Color(Atoms):
-    """Sample value sort: colour terms."""
+    """Sample value sort: color terms."""
     red: Atom
     grn: Atom
 

@@ -29,7 +29,7 @@ __all__ = [
     # "Optimizer", "Activation", "Cost", "ErrorSignal",
     # "Supervised", "TDError", "LeastSquares", "Tanh",
     # "SGD", "Adam",
-    # "MLP", "IDN", "Train"
+    # "MLP", "IDN", "Train",
     # from structures
     "StackOps", "Stack",
 ]
