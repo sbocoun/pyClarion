@@ -10,6 +10,7 @@ from .components import (Environment, Agent, Input, Choice, Pool,
     # Layer, Optimizer, Activation, Cost, ErrorSignal, Supervised, 
     # TDError, SGD, Adam, MLP, IDN, Train, LeastSquares, Tanh
     )
+from .structures import StackOps, Stack
 
 __all__ = [
     # from numdicts
@@ -22,11 +23,13 @@ __all__ = [
     "Atoms", "Chunks", "Rules",
     # from components
     "Environment", "Agent", "Input", "Choice", "Pool", "TopDown", "BottomUp", 
-    "ChunkStore", "Layer" 
+    "ChunkStore", "Layer",
     #"RuleStore", "FixedRules", 
     # "BaseLevel",
     # "Optimizer", "Activation", "Cost", "ErrorSignal",
     # "Supervised", "TDError", "LeastSquares", "Tanh",
     # "SGD", "Adam",
     # "MLP", "IDN", "Train"
+    # from structures
+    "StackOps", "Stack",
 ]
