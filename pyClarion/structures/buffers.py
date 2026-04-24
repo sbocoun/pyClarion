@@ -166,6 +166,9 @@ class Buffer(Stateful):
         priority: Priority = Priority.PROPAGATION
     ) -> Event:
         c = self._extract_chunk()
+        # Pre-register the chunk in the sort so that ~c yields a valid key.
+        # KeyspaceUpdate.apply will skip already-registered chunks.
+        self.c[None] = c
         main = self.main.new({~c: 1.0})
         uds = [ChunkUpdate(self.c, add=(c,)), ForwardUpdate(self.main, main)]
         return Event(self._flip, uds, dt, priority)

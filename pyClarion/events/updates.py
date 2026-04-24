@@ -78,6 +78,8 @@ class KeyspaceUpdate[P: KSParent, C: KSChild](Update[P]):
 
     def apply(self) -> None:
         for child in self.add:
+            if hasattr(child, "_parent_"):
+                continue  # already registered (e.g., pre-registered by caller)
             try:
                 self.node[child._name_] = child
             except AttributeError:
