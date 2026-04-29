@@ -170,7 +170,7 @@ class Buffer(Stateful):
         # KeyspaceUpdate.apply will skip already-registered chunks.
         self.c[None] = c
         main = self.main.new({~c: 1.0})
-        uds = [ChunkUpdate(self.c, add=(c,)), ForwardUpdate(self.main, main)]
+        uds = [ForwardUpdate(self.main, main), ChunkUpdate(self.c, add=(c,))]
         return Event(self._flip, uds, dt, priority)
 
     def finish_flip(self, 
